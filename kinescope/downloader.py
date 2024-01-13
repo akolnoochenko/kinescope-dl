@@ -5,7 +5,7 @@ from typing import Union
 from pathlib import Path
 from requests import Session
 from subprocess import Popen
-from shutil import copyfileobj, rmtree
+from shutil import copyfileobj, rmtree, move
 from base64 import b64decode, b64encode
 from requests.exceptions import ChunkedEncodingError
 
@@ -21,7 +21,8 @@ class VideoDownloader:
     def __init__(self, kinescope_video: KinescopeVideo,
                  temp_dir: Union[str, PathLike] = './temp',
                  ffmpeg_path: Union[str, PathLike] = './ffmpeg',
-                 mp4decrypt_path: Union[str, PathLike] = './mp4decrypt'):
+                 mp4decrypt_path: Union[str, PathLike] = './mp4decrypt',
+                 audio_only=False):
         self.kinescope_video: KinescopeVideo = kinescope_video
 
         self.temp_path: Path = Path(temp_dir)
@@ -39,18 +40,20 @@ class VideoDownloader:
 
         self.mpd_master: MPEGDASH = self._fetch_mpd_master()
 
+        self.audio_only = audio_only
+
     def __del__(self):
         rmtree(self.temp_path)
 
-    def _merge_tracks(self, source_video_filepath: str | PathLike,
-                      source_audio_filepath: str | PathLike,
+    def _merge_tracks(self, source_filepaths: list[str | PathLike],
                       target_filepath: str | PathLike):
+        args = [self.ffmpeg_path]
+        for p in source_filepaths:
+            args += '-i', p
+        args += '-c', 'copy', target_filepath
+        args += '-y', '-loglevel', 'error'
         try:
-            Popen((self.ffmpeg_path,
-                   "-i", source_video_filepath,
-                   "-i", source_audio_filepath,
-                   "-c", "copy", target_filepath,
-                   "-y", "-loglevel", "error")).communicate()
+            Popen(args).communicate()
         except FileNotFoundError:
             raise FFmpegNotFoundError('FFmpeg binary was not found at the specified path')
 
@@ -148,39 +151,39 @@ class VideoDownloader:
             resolution = self.get_resolutions()[-1]
 
         key = self._get_license_key()
+        audio_suffix, video_suffix, enc_suffix = '.aac', '.mp4', '.enc'
+        tmp_base_path = self.temp_path / self.kinescope_video.video_id
+        elements = [{
+            'url': self._get_segments_urls(resolution)['audio/mp4'],
+            'type': 'Audio',
+            'suffix': audio_suffix,
+            }, {
+            'url': self._get_segments_urls(resolution)['video/mp4'],
+            'type': 'Video',
+            'suffix': video_suffix,
+        }]
+        if self.audio_only:
+            elements.pop()
 
-        self._fetch_segments(
-            self._get_segments_urls(resolution)['video/mp4'],
-            self.temp_path / f'{self.kinescope_video.video_id}_video.mp4{".enc" if key else ""}',
-            'Video'
-        )
-        self._fetch_segments(
-            self._get_segments_urls(resolution)['audio/mp4'],
-            self.temp_path / f'{self.kinescope_video.video_id}_audio.mp4{".enc" if key else ""}',
-            'Audio'
-        )
+        for el in elements:
+            tmp_path = Path(f'{tmp_base_path}_{el["type"]}{el["suffix"]}')
+            el['tmp_path'] = tmp_path
+            el['enc_path'] = tmp_path.with_suffix(tmp_path.suffix + enc_suffix)
+            fetch_path = el['enc_path'] if key else tmp_path
+            self._fetch_segments(el['url'], fetch_path, el['type'])
 
         if key:
             print('[*] Decrypting...', end=' ')
-            self._decrypt_video(
-                self.temp_path / f'{self.kinescope_video.video_id}_video.mp4.enc',
-                self.temp_path / f'{self.kinescope_video.video_id}_video.mp4',
-                key
-            )
-            self._decrypt_video(
-                self.temp_path / f'{self.kinescope_video.video_id}_audio.mp4.enc',
-                self.temp_path / f'{self.kinescope_video.video_id}_audio.mp4',
-                key
-            )
+            for el in elements:
+                self._decrypt_video(el['enc_path'], el['tmp_path'], key)
             print('Done')
 
-        filepath = Path(filepath).with_suffix('.mp4')
+        filepath = Path(filepath).with_suffix(elements[-1]['suffix'])
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        print('[*] Merging tracks...', end=' ')
-        self._merge_tracks(
-            self.temp_path / f'{self.kinescope_video.video_id}_video.mp4',
-            self.temp_path / f'{self.kinescope_video.video_id}_audio.mp4',
-            filepath
-        )
+        if not self.audio_only:
+            print('[*] Merging tracks...', end=' ')
+            self._merge_tracks([el['tmp_path'] for el in elements], filepath)
+        else:
+            move(elements[0]['tmp_path'], filepath)
         print('Done')
