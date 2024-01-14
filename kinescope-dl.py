@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+import os
 import click
 from urllib.parse import urlparse
 
@@ -55,7 +57,10 @@ def main(referer,
         referer_url=referer
     )
 
-    downloader: KinescopeDownloader = KinescopeDownloader(kinescope_video, temp, ffmpeg_path=ffmpeg_path, mp4decrypt_path=mp4decrypt_path)
+    downloader: KinescopeDownloader = KinescopeDownloader(
+            kinescope_video, temp,
+            ffmpeg_path=os.environ.get('FFMPEG_PATH', './ffmpeg'),
+            mp4decrypt_path=os.environ.get('MP4DECRYPT_PATH', './mp4decrypt'))
 
     print('= OPTIONS ============================')
     video_resolutions = downloader.get_resolutions()
