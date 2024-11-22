@@ -113,13 +113,15 @@ class VideoDownloader:
                         segments_urls: list[str],
                         filepath: str | PathLike,
                         progress_bar_label: str = ''):
-        segments_urls = [seg for i, seg in enumerate(segments_urls) if i == segments_urls.index(seg)]
+        visited_urls = set()
         with open(filepath, 'wb') as f:
             with tqdm(desc=progress_bar_label,
                       total=len(segments_urls),
                       bar_format='{desc}: {percentage:3.0f}%|{bar:10}| [{n_fmt}/{total_fmt}]') as progress_bar:
                 for segment_url in segments_urls:
-                    self._fetch_segment(segment_url, f)
+                    if segment_url not in visited_urls:
+                        self._fetch_segment(segment_url, f)
+                        visited_urls.add(segment_url)
                     progress_bar.update()
 
     def _get_segments_urls(self, resolution: tuple[int, int]) -> dict[str:list[str]]:
@@ -130,9 +132,9 @@ class VideoDownloader:
                 idx = resolutions.index(resolution) if adaptation_set.representations[0].height else 0
                 representation = adaptation_set.representations[idx]
                 base_url = representation.base_urls[0].base_url_value
-                result[adaptation_set.mime_type] = [base_url + segment_url.media for segment_url in representation.segment_lists[0].segment_urls if segment_url.media]
-                if not result[adaptation_set.mime_type]:
-                    result[adaptation_set.mime_type] = [base_url]
+                result[adaptation_set.mime_type] = [
+                    base_url + (segment_url.media or '') 
+                    for segment_url in representation.segment_lists[0].segment_urls if segment_url.media]
 
             return result
         except ValueError:
