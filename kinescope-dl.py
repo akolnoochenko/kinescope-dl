@@ -63,8 +63,8 @@ def main(referer,
 
     downloader: KinescopeDownloader = KinescopeDownloader(
             kinescope_video, temp,
-            ffmpeg_path=os.environ.get('FFMPEG_PATH', './ffmpeg'),
-            mp4decrypt_path=os.environ.get('MP4DECRYPT_PATH', './mp4decrypt'),
+            ffmpeg_path=os.environ.get('FFMPEG_PATH', ffmpeg_path),
+            mp4decrypt_path=os.environ.get('MP4DECRYPT_PATH', mp4decrypt_path),
             audio_only=audio_only)
 
     print('= OPTIONS ============================')
