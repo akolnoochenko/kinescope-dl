@@ -12,6 +12,7 @@ ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv ${VIRTUAL_ENV}
 ENV PATH=${VIRTUAL_ENV}/bin:${PATH}
 RUN pip install -r /tmp/requirements.txt && rm -f /tmp/requirements.txt
+RUN pip install ipython
 ENV FFMPEG_PATH=/usr/bin/ffmpeg
 ENV MP4DECRYPT_PATH=/opt/bento4/bin/mp4decrypt
 
