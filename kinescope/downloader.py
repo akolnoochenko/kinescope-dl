@@ -134,7 +134,7 @@ class VideoDownloader:
                 base_url = representation.base_urls[0].base_url_value
                 result[adaptation_set.mime_type] = [
                     base_url + (segment_url.media or '') 
-                    for segment_url in representation.segment_lists[0].segment_urls if segment_url.media]
+                    for segment_url in representation.segment_lists[0].segment_urls]
 
             return result
         except ValueError:
